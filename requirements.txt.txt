@@ -1,0 +1,11 @@
+streamlit
+pandas
+numpy
+plotly
+joblib
+scikit-learn
+kmapper
+matplotlib
+persim
+umap-learn
+gtda
