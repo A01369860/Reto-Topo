@@ -12,9 +12,9 @@ from persim import plot_diagrams
 import umap
 import io
 import base64
-from gtda.homology import VietorisRipsPersistence
-from gtda.diagrams import PersistenceEntropy
-from gtda.plotting import plot_diagram
+#from gtda.homology import VietorisRipsPersistence
+#from gtda.diagrams import PersistenceEntropy
+#from gtda.plotting import plot_diagram
 import plotly.express as px
 import pickle
 
