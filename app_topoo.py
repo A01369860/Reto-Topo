@@ -11,44 +11,28 @@ import matplotlib.pyplot as plt
 from persim import plot_diagrams
 import umap
 import io
-import base64
-#from gtda.homology import VietorisRipsPersistence
-#from gtda.diagrams import PersistenceEntropy
-#from gtda.plotting import plot_diagram
-import plotly.express as px
-import pickle
 
 
-#Modelo1
-with open("scaler_modelo1.pkl", "rb") as f:
-    scaler_modelo1 = pickle.load(f)
-with open("projector_modelo1.pkl", "rb") as f:
-    projector_modelo1 = pickle.load(f)
-with open("X_projected_modelo1.pkl", "rb") as f:
-    X_projected_modelo1 = pickle.load(f)
-    
-#Modelo2
-with open("scaler_modelo2.pkl", "rb") as f:
-    scaler_modelo2 = pickle.load(f)
-with open("projector_modelo2.pkl", "rb") as f:
-    projector_modelo2 = pickle.load(f)
-with open("X_projected_modelo2.pkl", "rb") as f:
-    X_projected_modelo2 = pickle.load(f)
-    
-df_nn = pd.read_csv("df_nn.csv")
-X_projected = np.load("X_projected2.npy")
-df_filtered = pd.read_csv("df_filtered.csv")
+# Cargar archivos entrenados
+scaler = load("scaler.joblib")
+projector = load("umap_projector.joblib")
+X_projected = np.load("X_projected.npy")
 df_filtered_modelo = pd.read_csv("df_filtered_modelo.csv")
-bengalas = pd.read_csv("bengalas.csv")
-df_modelo1 = pd.read_csv("df_modelo1.csv")
-df_modelo2 = pd.read_csv("df_modelo2.csv")
 
-features = ["Recorrido", "Rendimiento_kmpl", "TON C02"]
-scaler = StandardScaler()
-df_norm = df_nn.copy()
-df_norm[features] = scaler.fit_transform(df_nn[features])
+# Cargar archivos de homología (opcional)
+diagramas = np.load("tda_diagramas.npy", allow_pickle=True)
+#df_avg2 = pd.read_csv("df_avg2.csv", parse_dates=['Fecha Transacción'])
+# Leer el CSV de la serie de tiempo
 
-#Función de predicción
+df_avg = pd.read_csv("df_avg_serie_tiempo.csv")
+
+# Convertir la columna de fechas al formato correcto
+df_avg['Fecha Transacción'] = pd.to_datetime(df_avg['Fecha Transacción'], dayfirst=True, errors='coerce')
+df_avg.set_index('Fecha Transacción', inplace=True)
+df_avg.sort_index(inplace=True)
+
+# Función de predicción
+
 def prediccion_regresion_mapper(nuevo_x, df_filtered, scaler, projector, X_projected, k=10):
     x_scaled = scaler.transform(nuevo_x)
     x_umap = projector.transform(x_scaled)
@@ -77,185 +61,95 @@ tabs = st.tabs([
     "Introducción",
     "Exploración",
     "UMAP y bengalas",
+    "TDA y Homología",
     "Predicción",
     "Conclusiones",
 ])
 
-tab1, tab2, tab3, tab5, tab6= tabs
+tab1, tab2, tab3, tab4, tab5, tab6= tabs
+
+# Pestaña 1: Exploración
 with tab1:
-    st.title("Predicción de emisiones de CO₂ con Machine Learning y Topological Data Analysis (TDA).")
-    st.info("Maritza Barrios | José Banda | Renata Garfias | Máximo Caballero | Isis Malfavón | Génesis Pereyra")
-    st.subheader("Beneficios del Proyecto")
-    st.markdown("""
-    - **Detección temprana de anomalías:** antes de que generen impactos mayores.
-    - **Identificación de áreas de oportunidad:** localizar comportamientos inusuales y errores sistemáticos que generen emisiones altas de CO₂.
-    - **Planificación proactiva:** anticipación de demanda futura y estrategia para disminuir las emisiones de CO₂.
-    """)
-
-    # Crear 2 columnas
-    col1, col2 = st.columns(2)
-
-    # Imagen en la columna 1
-    with col1:
-        st.image("img1.jpeg", use_container_width=True)
-
-    # Imagen en la columna 2
-    with col2:
-        st.image("img2.jpeg", use_container_width=True)
-
-
+    st.title("Beneficios del Proyecto")
 with tab2:
-    st.header("Descripción de Variables")
-    # Lista de variables
-    variables = [
-        {
-            "nombre": "Recorrido",
-            "descripcion": "Distancia total recorrida por el vehículo durante la transacción (en kilómetros)."
-        },
-        {
-            "nombre": "Placa",
-            "descripcion": "Matrícula única que identifica al vehículo (convertida a numérica/categórica)."
-        },
-        {
-            "nombre": "Toneladas de CO₂",
-            "descripcion": "Emisiones estimadas de dióxido de carbono generadas por el consumo de diésel en la transacción (en toneladas)."
-        },
-        {
-            "nombre": "Rendimiento KMPL",
-            "descripcion": "Rendimiento de combustible (Km por litro).\n *Variable creada*."
-        }
-    ]
+    st.title("Exploración del Dataset")
+    st.dataframe(df_filtered_modelo.sample(10))
+    st.subheader("Distribución de emisiones (TON C02)")
+    st.plotly_chart(px.histogram(df_filtered_modelo, x="TON C02", nbins=30))
+    st.subheader("Relación entre rendimiento y emisiones")
+    st.plotly_chart(px.scatter(df_filtered_modelo, x="Rendimiento_kmpl", y="TON C02", color="Placa"))
+    st.subheader("Distribución de variables numéricas")
+    var = st.selectbox("Selecciona una variable", df_filtered_modelo.select_dtypes(include=np.number).columns)
+    st.plotly_chart(px.histogram(df_filtered_modelo, x=var, nbins=30))
 
-    # Mostrar como tarjetas bonitas en 2 columnas
-    for i in range(0, len(variables), 2):
-        cols = st.columns(2)
-        for j in range(2):
-            if i + j < len(variables):
-                var = variables[i + j]
-                with cols[j]:
-                    st.subheader(f"🔸 {var['nombre']}")
-                    st.markdown(var['descripcion'], unsafe_allow_html=True)
-    
-    st.subheader("Exploración del Dataset")
-    st.dataframe(df_nn.tail(5))
-    
-    # 1️⃣ Recorrido vs TON C02
-    fig1 = px.scatter(df_norm, 
-                    x="Recorrido", 
-                    y="TON C02", 
-                    title="Recorrido vs TON C02")
-    st.plotly_chart(fig1)
-    
-    # 2️⃣ Rendimiento_kmpl vs TON C02
-    fig2 = px.scatter(df_norm, 
-                    x="Rendimiento_kmpl", 
-                    y="TON C02", 
-                    title="Rendimiento vs TON C02")
-    st.plotly_chart(fig2)
-    
-    # Scatter plot
-    fig3 = px.scatter(df_nn, x="Placa", y="TON C02",
-                    labels={"x": "Placa", "y": "Toneladas de CO₂"},
-                    title="Relación de Placa vs TON C02")
-    st.plotly_chart(fig3)
-    
+
 # Pestaña 3: UMAP
 with tab3:
     st.title("Visualización del espacio UMAP")
-    #st.write("Espacio proyectado de los datos con color por emisiones")
+    st.write("Espacio proyectado de los datos con color por emisiones")
     st.plotly_chart(px.scatter(
         x=X_projected[:, 0], y=X_projected[:, 1],
         color=df_filtered_modelo["TON C02"],
-        labels={"x": "UMAP 1", "y": "UMAP 2"}
+        labels={"x": "UMAP 1", "y": "UMAP 2"},
+        title="Espacio UMAP"
     ))
-    st.title("Visualización de Bengalas en UMAP")
-    #st.write("Espacio proyectado de los datos con etiquetas manuales de Bengalas")
 
-    # Creamos el scatter plot interactivo
-    fig_bengalas = px.scatter(
-        x=X_projected[:, 0],
-        y=X_projected[:, 1],
-        color=bengalas['Grupo'],
-        color_discrete_map={
-            'Resto': 'lightgray',
-            'Bengala_1': 'red',
-            'Bengala_2': 'green',
-            'Bengala_3': 'blue',
-            'Bengala_4': 'orange'
-        },
-        labels={"x": "UMAP 1", "y": "UMAP 2"}
-    )
+# Pestaña 4: TDA y Homología
+with tab4:
+    st.title("Análisis topológico (TDA)")
 
-    st.plotly_chart(fig_bengalas)
-    st.title("Segmentación de Bengalas")
-    st.subheader("Creación de nuevo dataframe para predicción")
-    #subset = bengalas[10:15,:]
-    #df_subset = pd.DataFrame(subset, columns=bengalas.columns)
-    bengalas_filtrado = bengalas.drop(columns=["Id Mercancía"])
-    bengalas_filtrado = bengalas_filtrado[bengalas_filtrado['Recorrido'] > 0]
-    st.dataframe(bengalas_filtrado.tail())
-    st.info("Se implementaron técnicas topológicas adicionales como la entropía de persistencia y la homología; sin embargo, no se presentan, ya que no aportaron mejoras significativas a los resultados.")
+    st.subheader("1. Gráfico Mapper")
+    try:
+        with open("mapper_Isis.html", "r", encoding="utf-8") as f:
+            html_string = f.read()
+        #st.write(html_string)
+        components.html(html_string, height=600, scrolling=True)
+    except FileNotFoundError:
+        st.error("No se encontró el archivo 'mapper_Isis.html'.")
 
-# Pestaña 5: Predicción
+    st.subheader("2. Serie de tiempo topológica (imagen)")
+
+    # Mostrar la imagen
+    # Mostrar la imagen
+    st.image("tiempo.png", caption="Evolución de variables topológicas", use_container_width=True)
+
+
+    st.subheader("3. Análisis de grupos (bengalas)")
+
+
+    #mostrar_bengalas = st.checkbox("Mostrar grupos identificados")
+    #if mostrar_bengalas:
+    #    df_bengalas = pd.read_csv("df_filtered_bengalas.csv")
+    #    colores = df_bengalas['Grupo'].map({
+    #        'Resto': 'lightgray', 'Bengala_1': 'red', 'Bengala_2': 'green',
+    #        'Bengala_3': 'blue', 'Bengala_4': 'orange'
+    #    })
+    #    st.plotly_chart(px.scatter(
+    #        x=X_projected[:, 0], y=X_projected[:, 1], color=colores,
+    #        labels={"x": "UMAP 1", "y": "UMAP 2"}, title="Grupos en el espacio UMAP"
+    #    ))
+
+# Pestaña 5: Conclusiones
+# Pestaña 2: Predicción
 with tab5:
     st.title("Predicción personalizada de emisiones")
-    bengalas_top5 = bengalas_filtrado[bengalas_filtrado['Grupo'].isin(['Bengala_1', 'Bengala_2', 'Bengala_3', 'Bengala_4', 'Resto'])]
-    bengalas_muestra = bengalas_top5.groupby('Grupo').sample(1, random_state=123).reset_index(drop=True)
-    st.dataframe(bengalas_muestra)
-    #bengalas.drop(columns="Id Mercancía")
-    # Crear columnas de entrada
-    st.subheader("Datos de entrada")
+    recorrido = st.number_input("Recorrido (km)", min_value=0.0, value=100.0)
+    placa = st.number_input("Placa (codificada)", min_value=0.0, value=5.0)
+    rendimiento = st.number_input("Rendimiento km/L", min_value=0.1, value=2.0)
+    k = st.slider("Vecinos para predicción (k)", min_value=1, max_value=10, value=10)
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        recorrido = st.number_input("Recorrido (km)", min_value=0.0, value=400.0, step=1.0)
-        placa = st.number_input("Placa (codificada)", min_value=0.0, value=592.0, step=1.0)
-        rendimiento = st.number_input("Rendimiento km/L", min_value=0.0, value=10000.0, step=1.0)
-        
-        # NUEVA VARIABLE CATEGORICA (para modelo 2)
-        categorias = ['Bengala_1', 'Bengala_2', 'Bengala_3', 'Bengala_4', 'Resto']
-        nueva_variable = st.selectbox("Grupo (modelo 2)", categorias)
-
-        # Creamos el mapping manual igual al LabelEncoder
-        mapa_categorias = {
-            'Bengala_1': 0,
-            'Bengala_2': 1,
-            'Bengala_3': 2,
-            'Bengala_4': 3,
-            'Resto': 4
-        }
-        categoria_codificada = mapa_categorias[nueva_variable]
-
-    with col2:
-        k1 = st.slider("Vecinos para M1 (k)", min_value=1, max_value=10, value=10)
-        k2 = st.slider("Vecinos para M2 (k)", min_value=1, max_value=10, value=10)
-    nuevo_df = pd.DataFrame([{
-        "Recorrido": recorrido,
-        "Placa": placa,
-        "Rendimiento_kmpl": rendimiento,
-        "Grupo": categoria_codificada
-    }])
-
-    # Botón único para predecir ambos modelos
-    if st.button("Predecir ambos modelos"):
+    if st.button("Predecir"):
         nuevo_x = np.array([[recorrido, placa, rendimiento]])
-        nuevo_x_m2 = nuevo_df[["Recorrido", "Placa", "Rendimiento_kmpl", "Grupo"]].values
+        resultado = prediccion_regresion_mapper(nuevo_x, df_filtered_modelo, scaler, projector, X_projected, k)
+        st.metric("TON C02 Estimado", f"{resultado['ton_co2_estimado']:.4f}")
 
-        resultado_m1 = prediccion_regresion_mapper(nuevo_x, df_modelo1, scaler_modelo1, projector_modelo1, X_projected_modelo1, k1)
-        resultado_m2 = prediccion_regresion_mapper(nuevo_x_m2, df_modelo2, scaler_modelo2, projector_modelo2, X_projected_modelo2, k2)
-
-        # Mostrar resultados
-        col3, col4 = st.columns(2)
-        with col3:
-            st.subheader("Modelo 1")
-            st.metric("TON C02 Estimado", f"{resultado_m1['ton_co2_estimado']:.4f}")
-
-        with col4:
-            st.subheader("Modelo 2")
-            st.metric("TON C02 Estimado", f"{resultado_m2['ton_co2_estimado']:.4f}")
-    st.subheader("Visualización entre predicciones de C0₂ y datos originales")
-
+    st.subheader("Desempeño general del modelo")
+    metricas = pd.DataFrame({
+        'Métrica': ['R²', 'MAE', 'RMSE'],
+        'Valor': [0.82, 0.049, 0.110]
+    })
+    st.table(metricas)
+    
 with tab6:
     st.title("Conclusiones del Proyecto")
     st.markdown("""
@@ -291,5 +185,10 @@ with tab6:
 
     #st.dataframe(tabla_modelos.style.format({"R²": "{:.2f}", "MAE": "{:.3f}", "RMSE": "{:.3f}"}))
 
-
+# Sidebar
+st.sidebar.header("Resumen del Proyecto")
+st.sidebar.info("""
+Análisis de emisiones de CO₂ con Machine Learning y Topological Data Analysis (TDA).
+""")
+st.sidebar.markdown("Creado por: Maritza, José David, Andrea Renata, Máximo, Isis, Génesis\nJunio 2025")
 
